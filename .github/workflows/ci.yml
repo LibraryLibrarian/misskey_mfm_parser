@@ -48,3 +48,20 @@ jobs:
 
       - name: Validate package
         run: dart pub publish --dry-run
+
+  gate:
+    name: all checks passed
+    needs: [quality]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure all deps succeeded
+        env:
+          # スキップされたジョブは skipped となり、失敗扱いにしない
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo 'Needs: ${{ toJson(needs) }}'
+          if [[ "$FAILED" == "true" ]]; then
+            echo "::error::One or more required jobs failed or were cancelled"
+            exit 1
+          fi
