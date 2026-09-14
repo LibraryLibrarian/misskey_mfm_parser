@@ -1,0 +1,38 @@
+# pub.dev へ公開するアーカイブから除外するもの。
+#
+# 注意: .pubignore を置くと pub は同じディレクトリの .gitignore を参照しなく
+# なるため、ビルド生成物や作業用ディレクトリもここで明示的に除外する必要がある。
+#
+# third_party/ は lib/ に埋め込んだ Unicode 絵文字正規表現のライセンス表示を
+# 含むため除外しない。
+
+# 利用者が使わない開発用ファイル
+/test/
+/tool/
+
+# ビルド生成物・作業ディレクトリ（.gitignore と同等の内容を維持する）
+.dart_tool/
+/build/
+/coverage/
+/pubspec.lock
+**/doc/api/
+.flutter-plugins-dependencies
+migrate_working_dir/
+
+# ツールチェーン・エディタ
+.fvm/
+.idea/
+*.iml
+*.ipr
+*.iws
+.atom/
+.buildlog/
+.history
+.svn/
+
+# その他
+.DS_Store
+*.class
+*.log
+*.pyc
+*.swp
