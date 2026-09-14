@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Excluded `test/` and `tool/` from the published package, reducing the archive from 94 KB to 43 KB. The `third_party/` license notice for the bundled Unicode emoji regular expression is still included
+
 ## [2.0.1] - 2026-09-15
 
 ### Added
