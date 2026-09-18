@@ -1,4 +1,79 @@
+// このファイルは misskey_auth / misskey_client / mastodon_client /
+// misskey_mfm_parser / misskey_emoji / misskey_mfm_renderer の6リポジトリで
+// バイト単位で同一に保つ。リポジトリごとの違いは release_config.dart に置く。
+//
+// 変更する場合は6リポジトリすべてへ同じ内容を反映すること。同一性は次で確認する。
+//   shasum -a 256 */tool/src/release_project.dart
+//
+// Flutter 3.38.7 と 3.47.1 の dart format が同じ出力を返すことを確認済み。
+// 折り返し位置が SDK 間で割れる書き方を持ち込まないこと。
+
 import 'dart:io';
+
+/// How many times a package depends on itself inside a single reference file.
+sealed class VersionReferenceCount {
+  const VersionReferenceCount();
+
+  /// Requires exactly [count] references, failing when the number differs.
+  const factory VersionReferenceCount.exactly(int count) = _ExactReferences;
+
+  /// Requires at least one reference and updates every one of them.
+  const factory VersionReferenceCount.atLeastOne() = _AnyReferences;
+
+  void _check(int found, {required String path, required String packageName});
+}
+
+final class _ExactReferences extends VersionReferenceCount {
+  const _ExactReferences(this.count);
+
+  final int count;
+
+  @override
+  void _check(int found, {required String path, required String packageName}) {
+    if (found == count) return;
+    final noun = count == 1 ? 'reference' : 'references';
+    final amount = count == 1 ? 'one' : '$count';
+    throw ReleaseToolException(
+      '$path must contain exactly $amount dependency $noun for $packageName.',
+    );
+  }
+}
+
+final class _AnyReferences extends VersionReferenceCount {
+  const _AnyReferences();
+
+  @override
+  void _check(int found, {required String path, required String packageName}) {
+    if (found > 0) return;
+    throw ReleaseToolException(
+      '$path must contain at least one dependency reference for $packageName.',
+    );
+  }
+}
+
+/// Per-repository release settings.
+///
+/// Everything that differs between the packages sharing this tool lives here,
+/// so that `release_project.dart` itself stays byte-identical across them.
+final class ReleaseConfig {
+  /// Creates a configuration; every field is optional.
+  const ReleaseConfig({
+    this.versionReferencePaths = const <String>[],
+    this.referenceCount = const VersionReferenceCount.exactly(1),
+    this.exampleLockPath,
+  });
+
+  /// Files that show the package dependency version to users.
+  final List<String> versionReferencePaths;
+
+  /// How many references each of [versionReferencePaths] must contain.
+  final VersionReferenceCount referenceCount;
+
+  /// A `pubspec.lock` that pins this package through a path dependency.
+  ///
+  /// `null` when the repository has no example application to keep in sync.
+  final String? exampleLockPath;
+}
 
 const _promotionPointerTemplate = 'Included in [{version}].';
 const _categoryOrder = <String>[
@@ -18,6 +93,10 @@ final RegExp _semanticVersionPattern = RegExp(
   r'(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
 );
 
+final RegExp _datedHeadingSuffix = RegExp(r' - \d{4}-\d{2}-\d{2}[ \t]*$');
+
+final RegExp _numericIdentifier = RegExp(r'^\d+$');
+
 /// An expected release file or value was missing or inconsistent.
 final class ReleaseToolException implements Exception {
   /// Creates an exception with a user-facing [message].
@@ -30,13 +109,17 @@ final class ReleaseToolException implements Exception {
   String toString() => message;
 }
 
-/// Updates the package version and changelog under [root].
+/// Returns the package version declared in `pubspec.yaml` under [root].
+String readPubspecVersion(Directory root) => _readProject(root).version;
+
+/// Updates every release version reference under [root].
 ///
 /// All inputs are validated before any file is written. The returned paths are
 /// relative to [root] and list every updated file.
 List<String> bumpVersion(
   Directory root,
   String nextVersion, {
+  required ReleaseConfig config,
   DateTime? releaseDate,
 }) {
   validateReleaseVersion(nextVersion);
@@ -61,12 +144,34 @@ List<String> bumpVersion(
     nextVersion,
   );
 
+  for (final path in config.versionReferencePaths) {
+    updates[path] = _replaceVersionReferences(
+      _readFile(root, path),
+      path: path,
+      packageName: project.name,
+      currentVersion: project.version,
+      nextVersion: nextVersion,
+      count: config.referenceCount,
+    );
+  }
+
   final changelog = _readFile(root, 'CHANGELOG.md');
   updates['CHANGELOG.md'] = _addChangelogRelease(
     changelog,
     nextVersion,
     releaseDate ?? DateTime.now(),
   );
+
+  final lockPath = config.exampleLockPath;
+  if (lockPath != null) {
+    updates[lockPath] = _replaceExampleLockVersion(
+      _readFile(root, lockPath),
+      path: lockPath,
+      packageName: project.name,
+      currentVersion: project.version,
+      nextVersion: nextVersion,
+    );
+  }
 
   for (final entry in updates.entries) {
     _file(root, entry.key).writeAsStringSync(entry.value);
@@ -75,14 +180,38 @@ List<String> bumpVersion(
   return updates.keys.toList(growable: false);
 }
 
-/// Verifies that [expectedVersion] matches the package and changelog version.
-void verifyRelease(Directory root, String expectedVersion) {
+/// Verifies that [expectedVersion] matches every release version reference.
+void verifyRelease(
+  Directory root,
+  String expectedVersion, {
+  required ReleaseConfig config,
+}) {
   validateReleaseVersion(expectedVersion);
 
   final project = _readProject(root);
   if (project.version != expectedVersion) {
     throw ReleaseToolException(
       'pubspec.yaml has version ${project.version}, expected $expectedVersion.',
+    );
+  }
+
+  for (final path in config.versionReferencePaths) {
+    _readVersionReferences(
+      _readFile(root, path),
+      path: path,
+      packageName: project.name,
+      expectedVersion: expectedVersion,
+      count: config.referenceCount,
+    );
+  }
+
+  final lockPath = config.exampleLockPath;
+  if (lockPath != null) {
+    _readExampleLockVersion(
+      _readFile(root, lockPath),
+      path: lockPath,
+      packageName: project.name,
+      expectedVersion: expectedVersion,
     );
   }
 
@@ -98,9 +227,6 @@ void verifyRelease(Directory root, String expectedVersion) {
     );
   }
 }
-
-/// Returns the package version declared in `pubspec.yaml` under [root].
-String readPubspecVersion(Directory root) => _readProject(root).version;
 
 /// Extracts the CHANGELOG body for [version] to use as release notes.
 String extractReleaseNotes(Directory root, String version) {
@@ -164,9 +290,9 @@ int compareReleaseVersions(String a, String b) {
   final left = _ReleaseVersion(a);
   final right = _ReleaseVersion(b);
   for (var i = 0; i < left.core.length; i++) {
-    final order = BigInt.parse(
-      left.core[i],
-    ).compareTo(BigInt.parse(right.core[i]));
+    final leftCore = BigInt.parse(left.core[i]);
+    final rightCore = BigInt.parse(right.core[i]);
+    final order = leftCore.compareTo(rightCore);
     if (order != 0) return order;
   }
   final leftPre = left.prerelease;
@@ -174,11 +300,10 @@ int compareReleaseVersions(String a, String b) {
   if (leftPre.isEmpty) return rightPre.isEmpty ? 0 : 1;
   if (rightPre.isEmpty) return -1;
   for (var i = 0; i < leftPre.length && i < rightPre.length; i++) {
-    final numeric = RegExp(r'^\d+$');
-    final leftNumber = numeric.hasMatch(leftPre[i])
+    final leftNumber = _numericIdentifier.hasMatch(leftPre[i])
         ? BigInt.parse(leftPre[i])
         : null;
-    final rightNumber = numeric.hasMatch(rightPre[i])
+    final rightNumber = _numericIdentifier.hasMatch(rightPre[i])
         ? BigInt.parse(rightPre[i])
         : null;
     final int order;
@@ -213,13 +338,14 @@ final class _ReleaseVersion {
 
 _Project _readProject(Directory root) {
   final pubspec = _readFile(root, 'pubspec.yaml');
+  final name = _readSingleValue(pubspec, path: 'pubspec.yaml', field: 'name');
   final version = _readSingleValue(
     pubspec,
     path: 'pubspec.yaml',
     field: 'version',
   );
   validateReleaseVersion(version);
-  return _Project(version: version, pubspec: pubspec);
+  return _Project(name: name, version: version, pubspec: pubspec);
 }
 
 String _readSingleValue(
@@ -268,6 +394,148 @@ String _replacePubspecVersion(
     versionStart + foundVersion.length,
     nextVersion,
   );
+}
+
+String _replaceVersionReferences(
+  String content, {
+  required String path,
+  required String packageName,
+  required String currentVersion,
+  required String nextVersion,
+  required VersionReferenceCount count,
+}) {
+  final matches = _versionReferenceMatches(
+    content,
+    path: path,
+    packageName: packageName,
+    count: count,
+  );
+  var updated = content;
+  // Replace backwards so that the earlier offsets stay valid.
+  for (final match in matches.reversed) {
+    final foundVersion = match.group(2)!;
+    if (foundVersion != currentVersion) {
+      throw ReleaseToolException(
+        '$path references $packageName ^$foundVersion, expected '
+        '^$currentVersion.',
+      );
+    }
+    final versionStart = match.start + match.group(1)!.length;
+    updated = updated.replaceRange(
+      versionStart,
+      versionStart + foundVersion.length,
+      nextVersion,
+    );
+  }
+  return updated;
+}
+
+void _readVersionReferences(
+  String content, {
+  required String path,
+  required String packageName,
+  required String expectedVersion,
+  required VersionReferenceCount count,
+}) {
+  final matches = _versionReferenceMatches(
+    content,
+    path: path,
+    packageName: packageName,
+    count: count,
+  );
+  for (final match in matches) {
+    final foundVersion = match.group(2)!;
+    if (foundVersion != expectedVersion) {
+      throw ReleaseToolException(
+        '$path references $packageName ^$foundVersion, expected '
+        '^$expectedVersion.',
+      );
+    }
+  }
+}
+
+List<RegExpMatch> _versionReferenceMatches(
+  String content, {
+  required String path,
+  required String packageName,
+  required VersionReferenceCount count,
+}) {
+  final pattern = RegExp(
+    '^([ \\t]*${RegExp.escape(packageName)}:[ \\t]*\\^)'
+    r'([^ \t\r\n#]+)([ \t]*(?:#.*)?)$',
+    multiLine: true,
+  );
+  final matches = pattern.allMatches(content).toList();
+  count._check(matches.length, path: path, packageName: packageName);
+  return matches;
+}
+
+String _replaceExampleLockVersion(
+  String content, {
+  required String path,
+  required String packageName,
+  required String currentVersion,
+  required String nextVersion,
+}) {
+  final match = _exampleLockVersionMatch(
+    content,
+    path: path,
+    packageName: packageName,
+  );
+  final foundVersion = match.group(2)!;
+  if (foundVersion != currentVersion) {
+    throw ReleaseToolException(
+      '$path has $packageName version $foundVersion, expected $currentVersion.',
+    );
+  }
+  final versionStart = match.start + match.group(1)!.length;
+  return content.replaceRange(
+    versionStart,
+    versionStart + foundVersion.length,
+    nextVersion,
+  );
+}
+
+void _readExampleLockVersion(
+  String content, {
+  required String path,
+  required String packageName,
+  required String expectedVersion,
+}) {
+  final match = _exampleLockVersionMatch(
+    content,
+    path: path,
+    packageName: packageName,
+  );
+  final foundVersion = match.group(2)!;
+  if (foundVersion != expectedVersion) {
+    throw ReleaseToolException(
+      '$path has $packageName version $foundVersion, expected '
+      '$expectedVersion.',
+    );
+  }
+}
+
+RegExpMatch _exampleLockVersionMatch(
+  String content, {
+  required String path,
+  required String packageName,
+}) {
+  final pattern = RegExp(
+    '^(  ${RegExp.escape(packageName)}:\\r?\\n'
+    r'(?:    [^\r\n]*(?:\r?\n|$))*?'
+    r'    source: path\r?\n'
+    r'    version: ")([^"]+)"[ \t]*$',
+    multiLine: true,
+  );
+  final matches = pattern.allMatches(content).toList();
+  if (matches.length != 1) {
+    throw ReleaseToolException(
+      '$path must contain exactly one $packageName package entry '
+      'with a version.',
+    );
+  }
+  return matches.single;
 }
 
 String _addChangelogRelease(
@@ -326,7 +594,7 @@ String _addChangelogRelease(
       final parsed = _ReleaseVersion(version);
       if (parsed.prerelease.isNotEmpty &&
           parsed.core.join('.') == next.core.join('.') &&
-          RegExp(r' - \d{4}-\d{2}-\d{2}[ \t]*$').hasMatch(heading.group(0)!)) {
+          _datedHeadingSuffix.hasMatch(heading.group(0)!)) {
         prereleases.add(heading);
       }
     }
@@ -445,8 +713,13 @@ String _readFile(Directory root, String path) {
 File _file(Directory root, String path) => File.fromUri(root.uri.resolve(path));
 
 final class _Project {
-  const _Project({required this.version, required this.pubspec});
+  const _Project({
+    required this.name,
+    required this.version,
+    required this.pubspec,
+  });
 
+  final String name;
   final String version;
   final String pubspec;
 }
