@@ -145,9 +145,6 @@ class _HashtagWithBracketsParser extends Parser<MfmNode> {
   ) {
     var currentPos = startPosition;
 
-    // ネスト制限を取得
-    final limit = state.limit!;
-
     while (currentPos < buffer.length) {
       final c = buffer[currentPos];
 
@@ -160,11 +157,9 @@ class _HashtagWithBracketsParser extends Parser<MfmNode> {
       if (HashtagParser.isBracketOpen(c)) {
         final closing = HashtagParser.getClosingBracket(c)!;
 
-        // mfm-js互換: グローバル深度をインクリメント
-        state.depth++;
-
-        // ネスト深度制限チェック（mfm-js互換: depth >= limit でフォールバック）
-        final useFallback = state.depth >= limit;
+        // mfm-js互換: グローバル深度をインクリメントし、深度制限とネスト予算を
+        // 確認する（深度が上限に達した場合と予算が尽きた場合はフォールバック）
+        final useFallback = !state.enter();
 
         // 括弧内の内容を一時バッファに解析
         final innerBuffer = StringBuffer();
