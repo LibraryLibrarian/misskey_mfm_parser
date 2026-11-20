@@ -115,9 +115,43 @@ void main() {
       expect(result, isA<Failure>());
     });
 
-    test('単独regional indicatorは解析失敗する', () {
-      final result = parser.parse('🇯');
-      expect(result, isA<Failure>());
+    // mfm.js 0.28.0 (@misskey-dev/emoji-data 17.0.3) の emojiRegex と同じ分類。
+    const mfmJsEmoji = <String, String>{
+      '単独regional indicator': '🇯',
+      '私用領域U+E50A': '\uE50A',
+      'VS16付きのU+26A1': '⚡\uFE0F',
+      'VS16付きのU+2B50': '⭐\uFE0F',
+      '肌色修飾子付きのU+26F7': '⛷\u{1F3FB}',
+    };
+    for (final entry in mfmJsEmoji.entries) {
+      test('mfm.jsと同じく${entry.key}を絵文字として解析する', () {
+        final result = parser.parse(entry.value);
+        expect(result, isA<Success<MfmNode>>());
+        expect(
+          (result as Success<MfmNode>).value,
+          UnicodeEmojiNode(entry.value),
+        );
+        expect(result.position, entry.value.length);
+      });
+    }
+
+    const mfmJsNonEmoji = <String, String>{
+      'U+00A9': '\u00A9',
+      'U+00AE': '\u00AE',
+      'U+2122': '\u2122',
+      'U+265F': '\u265F',
+    };
+    for (final entry in mfmJsNonEmoji.entries) {
+      test('mfm.jsと同じく装飾なしの${entry.key}は絵文字にしない', () {
+        expect(parser.parse(entry.value), isA<Failure>());
+      });
+    }
+
+    test('VS16付きのU+00A9は絵文字として解析する', () {
+      const input = '\u00A9\uFE0F';
+      final result = parser.parse(input);
+      expect(result, isA<Success<MfmNode>>());
+      expect((result as Success<MfmNode>).value, const UnicodeEmojiNode(input));
     });
 
     test('通常のテキストは解析失敗する', () {
