@@ -112,7 +112,7 @@ class _HashtagWithBracketsParser extends Parser<MfmNode> {
 
     // タグ内容を解析
     final tagBuffer = StringBuffer();
-    position = _parseTagContent(buffer, position, tagBuffer);
+    position = _parseTagContent(buffer, position, tagBuffer, nested: false);
 
     final tag = tagBuffer.toString();
 
@@ -132,20 +132,26 @@ class _HashtagWithBracketsParser extends Parser<MfmNode> {
   /// タグ内容を再帰的に解析
   ///
   /// mfm-js互換: 括弧に入る際にグローバルな state.depth を直接変更
-  /// ネスト制限に達した場合、括弧内は文字単位でマッチ（フォールバック）
+  /// 括弧内の各要素は`nest(innerItem, hashTagChar)`に相当し、解析前にネスト予算を
+  /// 消費する（要素がなく終了する試行も含む）。深度制限に達した場合や予算が
+  /// 尽きた場合、その要素は括弧をマッチできず1文字のフォールバックになる
   ///
   /// [buffer] 入力文字列
   /// [startPosition] 開始位置
   /// [output] 出力バッファ
+  /// [nested] 括弧の内側かどうか（タグ直後の最上位ではネストを消費しない）
   /// 戻り値: 新しい位置
   int _parseTagContent(
     String buffer,
     int startPosition,
-    StringBuffer output,
-  ) {
+    StringBuffer output, {
+    required bool nested,
+  }) {
     var currentPos = startPosition;
 
-    while (currentPos < buffer.length) {
+    while (true) {
+      final allowed = !nested || state.attempt();
+      if (currentPos >= buffer.length) break;
       final c = buffer[currentPos];
 
       // 禁止文字なら終了
@@ -155,32 +161,20 @@ class _HashtagWithBracketsParser extends Parser<MfmNode> {
 
       // 括弧開始文字の場合
       if (HashtagParser.isBracketOpen(c)) {
+        // フォールバックでは括弧にマッチしない
+        if (!allowed) break;
+
         final closing = HashtagParser.getClosingBracket(c)!;
 
-        // mfm-js互換: グローバル深度をインクリメントし、深度制限とネスト予算を
-        // 確認する（深度が上限に達した場合と予算が尽きた場合はフォールバック）
-        final useFallback = !state.enter();
-
-        // 括弧内の内容を一時バッファに解析
+        // mfm-js互換: グローバル深度をインクリメント
+        state.depth++;
         final innerBuffer = StringBuffer();
-        final int newPosition;
-
-        if (useFallback) {
-          // フォールバック: 文字単位でマッチ（禁止文字と括弧で停止）
-          newPosition = _parseTagContentFallback(
-            buffer,
-            currentPos + 1,
-            innerBuffer,
-          );
-        } else {
-          // 通常: 再帰的にパース
-          newPosition = _parseTagContent(
-            buffer,
-            currentPos + 1,
-            innerBuffer,
-          );
-        }
-
+        final newPosition = _parseTagContent(
+          buffer,
+          currentPos + 1,
+          innerBuffer,
+          nested: true,
+        );
         // mfm-js互換: グローバル深度をデクリメント
         state.depth--;
 
@@ -204,38 +198,6 @@ class _HashtagWithBracketsParser extends Parser<MfmNode> {
         output.write(c);
         currentPos++;
       }
-    }
-
-    return currentPos;
-  }
-
-  /// フォールバック用のタグ内容解析（文字単位マッチ）
-  ///
-  /// mfm-js互換: nest()のfallback=hashTagCharに相当
-  /// 禁止文字と括弧類で停止する
-  int _parseTagContentFallback(
-    String buffer,
-    int startPosition,
-    StringBuffer output,
-  ) {
-    var currentPos = startPosition;
-
-    while (currentPos < buffer.length) {
-      final c = buffer[currentPos];
-
-      // 禁止文字なら終了
-      if (HashtagParser.isForbidden(c)) {
-        break;
-      }
-
-      // 括弧類なら終了（フォールバックでは括弧をマッチしない）
-      if (HashtagParser.isBracketOpen(c) || _isClosingBracket(c)) {
-        break;
-      }
-
-      // 通常の文字
-      output.write(c);
-      currentPos++;
     }
 
     return currentPos;

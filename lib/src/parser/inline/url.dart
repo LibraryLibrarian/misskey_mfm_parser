@@ -88,7 +88,7 @@ class _UrlParserImpl extends Parser<MfmNode> {
 
     // URL内容を解析
     final contentBuffer = StringBuffer();
-    position = _parseUrlContent(buffer, position, contentBuffer);
+    position = _parseUrlContent(buffer, position, contentBuffer, nested: false);
 
     var content = contentBuffer.toString();
 
@@ -117,50 +117,44 @@ class _UrlParserImpl extends Parser<MfmNode> {
   /// URL内容を再帰的に解析
   ///
   /// mfm-js互換: 括弧に入る際にグローバルな state.depth を直接変更
-  /// ネスト制限に達した場合、括弧内は文字単位でマッチ（フォールバック）
+  /// 括弧内の各要素は`nest(innerItem, urlChar)`に相当し、解析前にネスト予算を
+  /// 消費する（要素がなく終了する試行も含む）。深度制限に達した場合や予算が
+  /// 尽きた場合、その要素は括弧をマッチできず1文字のフォールバックになる
   ///
   /// [buffer] 入力文字列
   /// [startPosition] 開始位置
   /// [output] 出力バッファ
+  /// [nested] 括弧の内側かどうか（スキーマ直後の最上位ではネストを消費しない）
   /// 戻り値: 新しい位置
   int _parseUrlContent(
     String buffer,
     int startPosition,
-    StringBuffer output,
-  ) {
+    StringBuffer output, {
+    required bool nested,
+  }) {
     var currentPos = startPosition;
 
-    while (currentPos < buffer.length) {
+    while (true) {
+      final allowed = !nested || state.attempt();
+      if (currentPos >= buffer.length) break;
       final c = buffer[currentPos];
 
       // 開き括弧の場合
       if (c == '(' || c == '[') {
+        // フォールバックでは括弧にマッチしない
+        if (!allowed) break;
+
         final closing = c == '(' ? ')' : ']';
 
-        // mfm-js互換: グローバル深度をインクリメントし、深度制限とネスト予算を
-        // 確認する（深度が上限に達した場合と予算が尽きた場合はフォールバック）
-        final useFallback = !state.enter();
-
-        // 括弧内の内容を一時バッファに解析
+        // mfm-js互換: グローバル深度をインクリメント
+        state.depth++;
         final innerBuffer = StringBuffer();
-        final int newPosition;
-
-        if (useFallback) {
-          // フォールバック: 文字単位でマッチ（括弧で停止）
-          newPosition = _parseUrlContentFallback(
-            buffer,
-            currentPos + 1,
-            innerBuffer,
-          );
-        } else {
-          // 通常: 再帰的にパース
-          newPosition = _parseUrlContent(
-            buffer,
-            currentPos + 1,
-            innerBuffer,
-          );
-        }
-
+        final newPosition = _parseUrlContent(
+          buffer,
+          currentPos + 1,
+          innerBuffer,
+          nested: true,
+        );
         // mfm-js互換: グローバル深度をデクリメント
         state.depth--;
 
@@ -181,38 +175,6 @@ class _UrlParserImpl extends Parser<MfmNode> {
         break;
       } else if (UrlParser.isUrlChar(c)) {
         // 通常のURL文字
-        output.write(c);
-        currentPos++;
-      } else {
-        // URL文字以外で終了
-        break;
-      }
-    }
-
-    return currentPos;
-  }
-
-  /// フォールバック用のURL内容解析（文字単位マッチ）
-  ///
-  /// mfm-js互換: nest()のfallback=urlCharに相当
-  /// URL文字のみマッチし、括弧類で停止する
-  int _parseUrlContentFallback(
-    String buffer,
-    int startPosition,
-    StringBuffer output,
-  ) {
-    var currentPos = startPosition;
-
-    while (currentPos < buffer.length) {
-      final c = buffer[currentPos];
-
-      // 括弧類なら終了（フォールバックでは括弧をマッチしない）
-      if (c == '(' || c == '[' || c == ')' || c == ']') {
-        break;
-      }
-
-      // URL文字ならマッチ
-      if (UrlParser.isUrlChar(c)) {
         output.write(c);
         currentPos++;
       } else {

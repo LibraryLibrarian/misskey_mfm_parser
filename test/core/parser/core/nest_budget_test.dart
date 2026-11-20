@@ -74,6 +74,28 @@ void main() {
     });
   });
 
+  group('括弧内の予算消費（mfm.js 0.28.0と同じ結果）', () {
+    // 括弧内の各要素と終端の試行が予算を消費するため、予算が尽きた後の
+    // 末尾の #a(b(c)) は括弧を含められない。結果はmfm.js 0.28.0で確認した値。
+    test('URLの括弧で予算を使い切ると、後続のハッシュタグの括弧がテキストになる', () {
+      final input = 'https://a(' * 100 + ' z **tail** #a(b(c))';
+      final result =
+          MfmParser().build(nestLimit: 100).parse(input)
+              as Success<List<MfmNode>>;
+      expect(result.value.sublist(result.value.length - 3), const [
+        TextNode(' '),
+        HashtagNode('a'),
+        TextNode('(b(c))'),
+      ]);
+    });
+
+    test('予算が残っていれば括弧を含むハッシュタグになる', () {
+      final result =
+          MfmParser().build().parse('#a(b(c))') as Success<List<MfmNode>>;
+      expect(result.value, const [HashtagNode('a(b(c))')]);
+    });
+  });
+
   group('MfmParser', () {
     test('同じパーサーを繰り返し使っても予算が尽きない', () {
       final parser = MfmParser().build();

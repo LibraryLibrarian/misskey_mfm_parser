@@ -18,10 +18,18 @@ class NestState {
 
   /// ネストに入り、さらに解析を続けてよいかを返す。
   ///
-  /// mfm-js互換: depth++は制限チェックの前に実行し、予算は深さの判定より先に
-  /// 確認・消費する。呼び出し側は終了時にdepth--する。
+  /// mfm-js互換: depth++は制限チェックの前に実行する。呼び出し側は終了時に
+  /// depth--する。
   bool enter() {
     depth++;
+    return attempt();
+  }
+
+  /// ネストした要素を1つ試す前の確認（mfm-jsの`nestable`に相当）。
+  ///
+  /// 予算を深さの判定より先に確認・消費する。深さの制限で拒否された場合も
+  /// 予算は消費される。深さは変更しない。
+  bool attempt() {
     final remaining = budget;
     if (remaining != null) {
       if (remaining <= 0) return false;
