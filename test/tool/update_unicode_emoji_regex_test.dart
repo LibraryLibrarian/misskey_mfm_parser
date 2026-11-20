@@ -7,15 +7,31 @@ import '../../tool/update_unicode_emoji_regex.dart';
 
 void main() {
   group('Unicode emoji regex source integrity', () {
-    final sourceBytes = utf8.encode(unicodeEmojiRegexPattern);
+    final sourceBytes = utf8.encode(
+      'const emojiRegex = /$unicodeEmojiRegexPattern/g;',
+    );
 
-    test('accepts the pinned Unicode 17 source blob', () async {
-      expect(sourceBytes.length, expectedSourceBytes);
-      await expectLater(validateSourceBytes(sourceBytes), completes);
+    test('extracts the pattern from the regex.mjs source', () {
+      expect(
+        extractPattern(utf8.decode(sourceBytes)),
+        unicodeEmojiRegexPattern,
+      );
+      expect(
+        () => extractPattern('export {};'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('keeps the pinned source size and rejects other bytes', () async {
+      expect(sourceBytes.length, lessThan(expectedSourceBytes));
+      await expectLater(
+        validateSourceBytes(sourceBytes),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('rejects a same-length one-byte modification', () async {
-      final modified = List<int>.of(sourceBytes);
+      final modified = List<int>.filled(expectedSourceBytes, 0x20);
       modified[0] ^= 1;
 
       await expectLater(

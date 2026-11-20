@@ -3,24 +3,28 @@ import 'dart:io';
 
 /// Regenerates the Unicode emoji regular expression used by the parser.
 ///
+/// The expression is the one mfm.js uses (`emojiRegex` exported by
+/// `@misskey-dev/emoji-data`), so that emoji are classified the same way as
+/// in Misskey.
+///
 /// Run this command from the repository root:
 ///
 /// ```sh
 /// dart run tool/update_unicode_emoji_regex.dart
 /// ```
 ///
-/// To update Unicode, advance the version and pinned upstream revision below,
-/// then review both the generated diff and the Unicode emoji regression tests.
+/// To follow a new mfm.js release, update the version, size, and blob below to
+/// match the `@misskey-dev/emoji-data` version it depends on, then review both
+/// the generated diff and the Unicode emoji regression tests.
 const unicodeVersion = '17.0';
-const sourceRevision = '05a4771881f9673b7b0b5ded8ca7ecc03244c82a';
-const sourceBlob = '80cc7d7247cd0d1a8c5480981906ba6d4e305d7b';
-const expectedSourceBytes = 14665;
+const sourcePackage = '@misskey-dev/emoji-data';
+const sourceVersion = '17.0.3';
+const sourceBlob = '2e07057041456ca7eac351b6985dbad80d992c25';
+const expectedSourceBytes = 17142;
 const outputPath = 'lib/src/parser/inline/generated/unicode_emoji_regex.dart';
 
 final Uri sourceUri = Uri.parse(
-  'https://raw.githubusercontent.com/'
-  'mathiasbynens/emoji-test-regex-pattern/$sourceRevision/'
-  'dist/emoji-$unicodeVersion/javascript-u.txt',
+  'https://cdn.jsdelivr.net/npm/$sourcePackage@$sourceVersion/built/regex.mjs',
 );
 
 /// Verifies both the size and Git blob SHA-1 of the pinned source bytes.
@@ -57,6 +61,27 @@ Future<void> validateSourceBytes(List<int> bytes) async {
   }
 }
 
+/// Extracts the regular expression body from `regex.mjs`.
+///
+/// The source is `const emojiRegex = /<pattern>/g;`. The pattern uses UTF-16
+/// surrogate escapes, so it must be compiled without the `unicode` flag.
+String extractPattern(String source) {
+  const prefix = 'const emojiRegex = /';
+  const suffix = '/g;';
+  final start = source.indexOf(prefix);
+  final end = start < 0 ? -1 : source.indexOf(suffix, start + prefix.length);
+  if (start < 0 || end < 0) {
+    throw const FormatException('Could not locate emojiRegex in the source.');
+  }
+  final pattern = source.substring(start + prefix.length, end);
+  if (pattern.isEmpty || pattern.contains('\n') || pattern.contains("'")) {
+    throw const FormatException(
+      'Downloaded source is not the expected one-line pattern.',
+    );
+  }
+  return pattern;
+}
+
 Future<void> main() async {
   if (!File('pubspec.yaml').existsSync()) {
     stderr.writeln('Run this tool from the repository root.');
@@ -84,17 +109,12 @@ Future<void> main() async {
       all.addAll(chunk);
       return all;
     });
+    final String pattern;
     try {
       await validateSourceBytes(bytes);
+      pattern = extractPattern(utf8.decode(bytes));
     } on FormatException catch (error) {
       stderr.writeln(error.message);
-      exitCode = 1;
-      return;
-    }
-
-    final pattern = utf8.decode(bytes).trim();
-    if (pattern.isEmpty || pattern.contains('\n') || pattern.contains("'")) {
-      stderr.writeln('Downloaded source is not the expected one-line pattern.');
       exitCode = 1;
       return;
     }
@@ -104,13 +124,15 @@ Future<void> main() async {
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 //
 // Unicode Emoji version: $unicodeVersion
-// Source: https://github.com/mathiasbynens/emoji-test-regex-pattern
-// Revision: $sourceRevision
+// Source: $sourcePackage@$sourceVersion (built/regex.mjs, the emojiRegex used by mfm.js)
 // Source blob: $sourceBlob
-// License: MIT (see third_party/emoji-test-regex-pattern/LICENSE)
+// License: MIT and Unicode License v3 (see third_party/misskey-emoji-data/)
 // Regenerate: dart run tool/update_unicode_emoji_regex.dart
 
-/// A Unicode $unicodeVersion RGI emoji sequence regular expression.
+/// The emoji regular expression used by mfm.js (Unicode $unicodeVersion).
+///
+/// The pattern uses UTF-16 surrogate escapes, so compile it without the
+/// `unicode` flag.
 const unicodeEmojiRegexPattern =
     r'$pattern';
 ''';

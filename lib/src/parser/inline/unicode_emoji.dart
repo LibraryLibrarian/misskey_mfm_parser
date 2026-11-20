@@ -5,19 +5,22 @@ import 'generated/unicode_emoji_regex.dart';
 
 /// Unicode絵文字パーサー
 ///
-/// Unicode絵文字シーケンスを解析
-/// mfm-js仕様:
-/// - Unicodeの絵文字シーケンスを認識
-/// - 肌色修飾子、ZWJ結合絵文字、国旗なども対応
+/// mfm.jsの`unicodeEmoji`と同じ正規表現で絵文字を認識する。
+/// 肌色修飾子、ZWJ結合絵文字、国旗のほか、単独のregional indicatorも
+/// 1つの絵文字として扱う。
 ///
-/// Unicode 17.0のRGI emoji sequenceから生成した正規表現を使用。
+/// 正規表現はmfm.jsが使う`@misskey-dev/emoji-data`（Unicode 17.0）から生成。
 class UnicodeEmojiParser {
-  /// Unicode 17.0のemoji-test dataから生成した正規表現。
+  /// mfm.jsと同じ絵文字の正規表現。
   ///
-  /// 出典と再生成手順は生成ファイルのヘッダーを参照。
+  /// 出典と再生成手順は生成ファイルのヘッダーを参照。パターンはUTF-16の
+  /// サロゲートエスケープで書かれているため、`unicode`は有効にしない。
+  ///
+  /// 先頭の`(?!\uFE0F)`は、mfm.jsが単独のVS16を絵文字ではなくテキストとして
+  /// 扱うことに合わせるためのもの。VS16で始まるパターンは単独のVS16だけで、
+  /// 他の選択肢には影響しない。
   static final RegExp _emojiRegex = RegExp(
-    unicodeEmojiRegexPattern,
-    unicode: true,
+    '(?!\\uFE0F)(?:$unicodeEmojiRegexPattern)',
   );
 
   /// Unicode絵文字パーサーを構築

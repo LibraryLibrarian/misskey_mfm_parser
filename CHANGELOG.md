@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+
+- Unicode emoji are now recognized with the same regular expression as mfm.js 0.28.0 (`@misskey-dev/emoji-data` 17.0.3) instead of the RGI sequence list. A lone regional indicator (U+1F1E6..U+1F1FF) and U+E50A become `UnicodeEmojiNode`s, while the bare characters U+00A9, U+00AE, U+2122 and U+265F no longer do (they still do with a following U+FE0F). Emoji written with U+FE0F, such as `⚡️` and `⭐️`, now include it in the node instead of leaving it behind as text, and U+26F7 followed by a skin tone modifier is a single emoji
+- Parsing now has the same nesting budget as mfm.js (`input.length * 20 + 1000` nested-syntax attempts per input). Once it is used up, further nested syntax is treated as text, which bounds the work done on adversarial input. Ordinary input never reaches it
 - Excluded `test/` and `tool/` from the published package, reducing the archive from 94 KB to 43 KB. The `third_party/` license notice for the bundled Unicode emoji regular expression is still included
 
 ## [2.0.1] - 2026-09-15
