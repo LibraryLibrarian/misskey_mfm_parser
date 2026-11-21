@@ -105,6 +105,7 @@ class MfmParser {
         char(':') | // emojiCode用
         char('#') | // hashtag用
         char(']') | // リンクラベル終端
+        newline() | // ラベル要素の境界で改行を検出する
         string(r'$[') | // fn用
         string('</plain>') | // plain用
         string('<plain>') | // plain用
