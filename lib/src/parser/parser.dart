@@ -284,7 +284,7 @@ class MfmParser {
           .cast<MfmNode>(),
     );
 
-    final start = full.plus().map(mergeAdjacentTextNodes).end();
+    final start = full.star().map(mergeAdjacentTextNodes).end();
 
     return plain.withSearchCache(
       math.withSearchCache(
@@ -349,7 +349,7 @@ class MfmParser {
         .cast<MfmNode>();
 
     return plain.withSearchCache(
-      simple.plus().map(mergeAdjacentTextNodes).end(),
+      simple.star().map(mergeAdjacentTextNodes).end(),
     );
   }
 }
