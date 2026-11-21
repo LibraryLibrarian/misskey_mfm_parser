@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parsing now has the same nesting budget as mfm.js (`input.length * 20 + 1000` nested-syntax attempts per input). Once it is used up, further nested syntax is treated as text, which bounds the work done on adversarial input. Ordinary input never reaches it
 - Excluded `test/` and `tool/` from the published package, reducing the archive from 94 KB to 43 KB. The `third_party/` license notice for the bundled Unicode emoji regular expression is still included
 
+### Fixed
+
+- Fixed quadratic parse time for input that repeats unclosed syntax, which made the parser freeze for seconds on adversarial input. Repeated `<plain>` (21,000 characters: 3 s to 20 ms), `[` and `[a` (5,000 repetitions: 4.7 s to 7 ms), `\(` and `<center>` followed by line breaks are now parsed in near-linear time. The resulting nodes and the nesting budget used are unchanged
+
 ## [2.0.1] - 2026-09-15
 
 ### Added
