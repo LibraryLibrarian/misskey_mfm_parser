@@ -280,7 +280,7 @@ class MfmParser {
 
     final start = full.plus().map(mergeAdjacentTextNodes).end();
 
-    return start;
+    return withNestBudget(start, nestState);
   }
 
   /// Builds and returns a simple parser.
