@@ -3,7 +3,7 @@
 // Unicode Emoji version: 17.0
 // Source: @misskey-dev/emoji-data@17.0.3 (built/regex.mjs, the emojiRegex used by mfm.js)
 // Source blob: 2e07057041456ca7eac351b6985dbad80d992c25
-// License: MIT and Unicode License v3 (see third_party/misskey-emoji-data/)
+// License: MIT (see third_party/misskey-emoji-data/)
 // Regenerate: dart run tool/update_unicode_emoji_regex.dart
 
 /// The emoji regular expression used by mfm.js (Unicode 17.0).

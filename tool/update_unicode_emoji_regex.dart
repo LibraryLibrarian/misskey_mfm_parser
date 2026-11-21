@@ -126,7 +126,7 @@ Future<void> main() async {
 // Unicode Emoji version: $unicodeVersion
 // Source: $sourcePackage@$sourceVersion (built/regex.mjs, the emojiRegex used by mfm.js)
 // Source blob: $sourceBlob
-// License: MIT and Unicode License v3 (see third_party/misskey-emoji-data/)
+// License: MIT (see third_party/misskey-emoji-data/)
 // Regenerate: dart run tool/update_unicode_emoji_regex.dart
 
 /// The emoji regular expression used by mfm.js (Unicode $unicodeVersion).
