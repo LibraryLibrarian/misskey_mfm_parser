@@ -54,7 +54,11 @@ class FnParser {
     return seq3(char('.'), _singleArg, additionalArg.star()).map((result) {
       final firstArg = result.$2;
       final additionalArgs = result.$3;
-      return Map<String, dynamic>.fromEntries([firstArg, ...additionalArgs]);
+      // mfm.jsは通常の{}へ代入するため、__proto__だけは継承setterが働き、
+      // 引数値（trueか文字列）は無視される。他の継承名は通常のキーになる。
+      return Map<String, dynamic>.fromEntries(
+        [firstArg, ...additionalArgs].where((arg) => arg.key != '__proto__'),
+      );
     });
   }();
 
