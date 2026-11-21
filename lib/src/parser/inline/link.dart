@@ -73,7 +73,7 @@ class _LinkParserImpl extends Parser<MfmNode> {
 
     // サイレントリンクかどうかを判定
     bool silent;
-    if (buffer.substring(position).startsWith('?[')) {
+    if (buffer.startsWith('?[', position)) {
       silent = true;
       position += 2;
     } else if (position < buffer.length && buffer[position] == '[') {

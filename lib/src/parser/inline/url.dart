@@ -76,10 +76,10 @@ class _UrlParserImpl extends Parser<MfmNode> {
 
     // スキーマをチェック（https:// または http://）
     String? schema;
-    if (buffer.substring(position).startsWith('https://')) {
+    if (buffer.startsWith('https://', position)) {
       schema = 'https://';
       position += 8;
-    } else if (buffer.substring(position).startsWith('http://')) {
+    } else if (buffer.startsWith('http://', position)) {
       schema = 'http://';
       position += 7;
     } else {
@@ -213,10 +213,10 @@ class _UrlAltParserImpl extends Parser<MfmNode> {
 
     // スキーマをチェック（https:// または http://）
     String? schema;
-    if (buffer.substring(position).startsWith('https://')) {
+    if (buffer.startsWith('https://', position)) {
       schema = 'https://';
       position += 8;
-    } else if (buffer.substring(position).startsWith('http://')) {
+    } else if (buffer.startsWith('http://', position)) {
       schema = 'http://';
       position += 7;
     } else {

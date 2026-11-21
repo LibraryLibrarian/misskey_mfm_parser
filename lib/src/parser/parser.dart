@@ -74,7 +74,8 @@ class MfmParser {
     final inlineCode = InlineCodeParser().buildWithFallback();
 
     // plainタグパーサー（パース無効化）
-    final plainTag = PlainParser().build();
+    final plain = PlainParser();
+    final plainTag = plain.build();
 
     // インライン数式パーサー
     final mathInline = MathInlineParser().build();
@@ -280,7 +281,7 @@ class MfmParser {
 
     final start = full.plus().map(mergeAdjacentTextNodes).end();
 
-    return withNestBudget(start, nestState);
+    return plain.withSearchCache(withNestBudget(start, nestState));
   }
 
   /// Builds and returns a simple parser.
@@ -316,7 +317,8 @@ class MfmParser {
     final emojiCode = EmojiCodeParser().build();
 
     // plainタグパーサー（emojiCodeを内部でパースしないため必要）
-    final plainTag = PlainParser().build();
+    final plain = PlainParser();
+    final plainTag = plain.build();
 
     // stopper: 各構文の開始文字
     // mfm-js仕様: unicodeEmoji > emojiCode > plainTag > text
@@ -335,6 +337,8 @@ class MfmParser {
     final simple = (unicodeEmoji | emojiCode | plainTag | textParser | oneChar)
         .cast<MfmNode>();
 
-    return simple.plus().map(mergeAdjacentTextNodes).end();
+    return plain.withSearchCache(
+      simple.plus().map(mergeAdjacentTextNodes).end(),
+    );
   }
 }
