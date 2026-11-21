@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed quadratic parse time for input that repeats unclosed syntax, which made the parser freeze for seconds on adversarial input. Repeated `<plain>` (21,000 characters: 3 s to 20 ms), `[` and `[a` (5,000 repetitions: 4.7 s to 7 ms), `\(` and `<center>` followed by line breaks are now parsed in near-linear time. The resulting nodes and the nesting budget used are unchanged
+- Fixed quadratic parse time for input that repeats unclosed syntax, which made the parser freeze for seconds on adversarial input. These are now parsed in near-linear time: repeated `<plain>` (21,000 characters: 3 s to 20 ms), `[` (5,000 repetitions: 4.5 s to 6 ms), `[a` (5,000 repetitions: 9.4 s to 15 ms), `\(` with or without line breaks, and `<center>` followed by line breaks (5,000 repetitions: 47 s to 0.1 s). The resulting nodes and the nesting budget used are unchanged
 
 ## [2.0.1] - 2026-09-15
 
