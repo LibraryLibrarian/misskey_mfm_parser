@@ -78,7 +78,8 @@ class MfmParser {
     final plainTag = plain.build();
 
     // インライン数式パーサー
-    final mathInline = MathInlineParser().build();
+    final math = MathInlineParser();
+    final mathInline = math.build();
 
     // 絵文字パーサー
     final emojiCode = EmojiCodeParser().build();
@@ -98,6 +99,7 @@ class MfmParser {
     // リンクラベル用インラインパーサー（URL、リンク、メンションを除外）
     // mfm-js仕様: リンクラベル内ではURL、リンク、メンションは無効
     final labelInline = undefined<MfmNode>();
+    final links = LinkParser();
     final labelStopper =
         char('`') |
         char(':') | // emojiCode用
@@ -121,10 +123,11 @@ class MfmParser {
         string('__') | // boldUnder用（_より先にチェック）
         string('*') |
         string('_');
-    final labelTextParser = (labelStopper.not() & unicodeEmoji.not() & any())
-        .plus()
-        .flatten()
-        .map(TextNode.new);
+    final labelTextParser = links.trackLabelText(
+      (labelStopper.not() & unicodeEmoji.not() & any()).plus().flatten().map(
+        TextNode.new,
+      ),
+    );
     final labelOneChar = any().map(TextNode.new);
 
     // ラベル内用パーサー（labelInlineを使用）
@@ -182,7 +185,7 @@ class MfmParser {
     );
 
     // リンクパーサー（ラベル用インラインパーサーを使用）
-    final link = LinkParser().buildWithFallback(labelInline, state: nestState);
+    final link = links.buildWithFallback(labelInline, state: nestState);
 
     final stopper =
         char('`') |
@@ -254,7 +257,8 @@ class MfmParser {
     // blocks: code block > math block > center > quote
     final codeBlock = CodeBlockParser().build();
     final mathBlock = MathBlockParser().build();
-    final center = CenterParser().buildWithInner(inline, state: nestState);
+    final centers = CenterParser();
+    final center = centers.buildWithInner(inline, state: nestState);
     final search = SearchParser().build();
 
     // fullParserはblocks + inlineの組み合わせ（quote内で再帰的に使用）
@@ -281,7 +285,13 @@ class MfmParser {
 
     final start = full.plus().map(mergeAdjacentTextNodes).end();
 
-    return plain.withSearchCache(withNestBudget(start, nestState));
+    return plain.withSearchCache(
+      math.withSearchCache(
+        links.withSearchCache(
+          centers.withSearchCache(withNestBudget(start, nestState)),
+        ),
+      ),
+    );
   }
 
   /// Builds and returns a simple parser.

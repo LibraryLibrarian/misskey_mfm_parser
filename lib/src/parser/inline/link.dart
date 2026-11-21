@@ -3,6 +3,7 @@ import 'package:petitparser/petitparser.dart';
 import '../../ast.dart';
 import '../common/utils.dart';
 import '../core/nest.dart';
+import '../core/scan_cache.dart';
 import 'url.dart';
 
 /// リンクパーサー
@@ -14,6 +15,13 @@ import 'url.dart';
 /// - ラベル内は再帰的にインラインパースを適用
 /// - ラベル内ではURL、リンク、メンションは無効（linkLabel状態）
 class LinkParser {
+  final _cache = FailedScanCache();
+
+  Parser<T> withSearchCache<T>(Parser<T> parser) =>
+      _cache.withSearchCache(parser);
+
+  Parser<T> trackLabelText<T>(Parser<T> parser) => _cache.trackText(parser);
+
   /// リンクパーサーを構築
   ///
   /// [labelInlineParser] はラベル内のインライン構文をパースするパーサー
@@ -23,7 +31,7 @@ class LinkParser {
     Parser<MfmNode> labelInlineParser, {
     required NestState state,
   }) {
-    return _LinkParserImpl(labelInlineParser, state: state);
+    return _LinkParserImpl(labelInlineParser, _cache, state: state);
   }
 
   /// フォールバック付きリンクパーサー
@@ -47,7 +55,9 @@ class LinkParser {
 
 /// リンクパーサーの実装
 class _LinkParserImpl extends Parser<MfmNode> {
-  _LinkParserImpl(this._labelInlineParser, {required this.state});
+  _LinkParserImpl(this._labelInlineParser, this.cache, {required this.state});
+
+  final FailedScanCache cache;
 
   final Parser<MfmNode> _labelInlineParser;
 
@@ -86,6 +96,14 @@ class _LinkParserImpl extends Parser<MfmNode> {
     // ラベル部分をパース（] まで）
     final labelNodes = <MfmNode>[];
     var labelContext = Context(buffer, position);
+    // silent は開始記号で確定し、ラベル以降の成否には影響しない。
+    // ラベル用パーサーはこの実装ごとに固定されている。
+    final scan = cache.start(buffer, state, this);
+
+    Result<MfmNode> fail(String message) {
+      scan?.fail(message);
+      return context.failure(message);
+    }
 
     while (labelContext.position < buffer.length) {
       final c = buffer[labelContext.position];
@@ -97,11 +115,16 @@ class _LinkParserImpl extends Parser<MfmNode> {
 
       // 改行は許可しない
       if (c == '\n' || c == '\r') {
-        return context.failure('newline in link label');
+        return fail('newline in link label');
       }
+
+      final cachedFailure = scan?.replay(labelContext.position);
+      if (cachedFailure != null) return fail(cachedFailure);
+      scan?.visit(labelContext.position);
 
       // インラインパーサーでラベル内容をパース
       final result = _nestedLabelInlineParser.parseOn(labelContext);
+      scan?.text(labelContext.position, result.position);
       labelNodes.add(result.value);
       labelContext = Context(buffer, result.position);
     }
@@ -110,13 +133,13 @@ class _LinkParserImpl extends Parser<MfmNode> {
 
     // `]` で閉じることを確認
     if (position >= buffer.length || buffer[position] != ']') {
-      return context.failure('expected ]');
+      return fail('expected ]');
     }
     position++;
 
     // `(` が続くことを確認
     if (position >= buffer.length || buffer[position] != '(') {
-      return context.failure('expected (');
+      return fail('expected (');
     }
     position++;
 
@@ -131,7 +154,7 @@ class _LinkParserImpl extends Parser<MfmNode> {
     }
 
     if (urlResult is Failure) {
-      return context.failure('invalid URL in link');
+      return fail('invalid URL in link');
     }
 
     final urlNode = urlResult.value as UrlNode;
@@ -139,7 +162,7 @@ class _LinkParserImpl extends Parser<MfmNode> {
 
     // `)` で閉じることを確認
     if (position >= buffer.length || buffer[position] != ')') {
-      return context.failure('expected )');
+      return fail('expected )');
     }
     position++;
 
@@ -164,5 +187,6 @@ class _LinkParserImpl extends Parser<MfmNode> {
   }
 
   @override
-  Parser<MfmNode> copy() => _LinkParserImpl(_labelInlineParser, state: state);
+  Parser<MfmNode> copy() =>
+      _LinkParserImpl(_labelInlineParser, cache, state: state);
 }
