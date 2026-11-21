@@ -4,6 +4,8 @@ import 'package:misskey_mfm_parser/src/parser/parser.dart';
 import 'package:petitparser/petitparser.dart';
 import 'package:test/test.dart';
 
+import '../../../support/ast_json.dart';
+
 void main() {
   group('CodeBlockParser（コードブロック）', () {
     test('言語指定（dart）: ```dart\nvoid main() {}\n```', () {
@@ -83,6 +85,84 @@ void main() {
             ),
           ],
         );
+      });
+    });
+
+    group('mfm-js互換: 言語指定のJS trim', () {
+      final parser = MfmParser().build();
+
+      // mfm-js 0.28.0の実出力を確認済み。CR/LFは言語指定の区切りなので除く。
+      for (final trimCase in const [
+        (unit: 0x0009, trims: true),
+        (unit: 0x000b, trims: true),
+        (unit: 0x000c, trims: true),
+        (unit: 0x0020, trims: true),
+        (unit: 0x0085, trims: false),
+        (unit: 0x00a0, trims: true),
+        (unit: 0x1680, trims: true),
+        (unit: 0x180e, trims: false),
+        (unit: 0x2000, trims: true),
+        (unit: 0x2001, trims: true),
+        (unit: 0x2002, trims: true),
+        (unit: 0x2003, trims: true),
+        (unit: 0x2004, trims: true),
+        (unit: 0x2005, trims: true),
+        (unit: 0x2006, trims: true),
+        (unit: 0x2007, trims: true),
+        (unit: 0x2008, trims: true),
+        (unit: 0x2009, trims: true),
+        (unit: 0x200a, trims: true),
+        (unit: 0x2028, trims: true),
+        (unit: 0x2029, trims: true),
+        (unit: 0x202f, trims: true),
+        (unit: 0x205f, trims: true),
+        (unit: 0x3000, trims: true),
+        (unit: 0xfeff, trims: true),
+      ]) {
+        final char = String.fromCharCode(trimCase.unit);
+        final label = trimCase.unit.toRadixString(16).padLeft(4, '0');
+        for (final languageCase in [
+          (name: '単独', input: char, expected: trimCase.trims ? null : char),
+          (
+            name: '前',
+            input: '${char}js',
+            expected: trimCase.trims ? 'js' : '${char}js',
+          ),
+          (
+            name: '後',
+            input: 'js$char',
+            expected: trimCase.trims ? 'js' : 'js$char',
+          ),
+          (
+            name: '前後',
+            input: '${char}js$char',
+            expected: trimCase.trims ? 'js' : '${char}js$char',
+          ),
+          (name: '内側', input: 'j${char}s', expected: 'j${char}s'),
+        ]) {
+          test('U+$labelを言語名の${languageCase.name}に置く', () {
+            final result = parser.parse('```${languageCase.input}\nfoo\n```');
+            expect(result, isA<Success<List<MfmNode>>>());
+            expect(
+              serializeMfmAst((result as Success<List<MfmNode>>).value),
+              [
+                {
+                  'type': 'codeBlock',
+                  'props': {'code': 'foo', 'language': languageCase.expected},
+                  'children': <Object?>[],
+                },
+              ],
+            );
+          });
+        }
+      }
+
+      test('JS空白を除去しても内側のU+0085は言語名として保持する', () {
+        final result = parser.parse('```\ufeff \u0085 \u00a0\nfoo\n```');
+        expect(result, isA<Success<List<MfmNode>>>());
+        expect((result as Success<List<MfmNode>>).value, const [
+          CodeBlockNode(code: 'foo', language: '\u0085'),
+        ]);
       });
     });
 
