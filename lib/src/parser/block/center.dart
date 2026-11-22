@@ -4,6 +4,7 @@ import '../../ast.dart';
 import '../common/utils.dart';
 import '../core/guards.dart';
 import '../core/nest.dart';
+import '../core/scan_cache.dart';
 
 /// 中央寄せブロックパーサー
 ///
@@ -14,6 +15,11 @@ import '../core/nest.dart';
 /// - `</center>` は行末でなければならない（入力末尾または直後が改行）
 /// - 前後の改行はブロック構文として消費される
 class CenterParser {
+  final _cache = FailedScanCache();
+
+  Parser<T> withSearchCache<T>(Parser<T> parser) =>
+      _cache.withSearchCache(parser);
+
   /// center タグ（基本版）
   Parser<MfmNode> build() {
     final lineBreak = newline();
@@ -64,30 +70,66 @@ class CenterParser {
     //      P.seq(newLine.option(), close)
     //    ), nest(r.inline)
     //   ).select(1).many(1)
-    final innerList = seq2(
+    final inner = seq2(
       (lineBreak.optional() & end).not(),
       nest(inline, state: state),
-    ).map((r) => r.$2).plus();
+    ).map((r) => r.$2);
 
     // 終了タグ直前の改行チェック
     final optionalNewlineBeforeEnd = lineBreak.optional();
 
     // mfm-js仕様に基づくパーサー構造:
     // [改行?, 行頭, <center>, 改行?, 内容, 改行?, </center>, 行末, 改行?]
-    final parser =
-        (lineBreak.optional() &
-                lineBegin() &
-                start &
-                optionalNewlineAfterStart &
-                innerList &
-                optionalNewlineBeforeEnd &
-                end &
-                lineEnd() &
-                lineBreak.optional())
-            .map<MfmNode>((result) {
-              final children = result[4] as List<MfmNode>;
-              return CenterNode(mergeAdjacentTextNodes(children));
-            });
-    return parser;
+    final after =
+        optionalNewlineBeforeEnd & end & lineEnd() & lineBreak.optional();
+    final body = _CenterBody(inner, after, _cache, state);
+    return (lineBreak.optional() &
+            lineBegin() &
+            start &
+            optionalNewlineAfterStart &
+            body)
+        .pick(4)
+        .cast<MfmNode>();
   }
+}
+
+class _CenterBody extends Parser<MfmNode> {
+  _CenterBody(this.inner, this.after, this.cache, this.state);
+  final Parser<MfmNode> inner;
+  final Parser<dynamic> after;
+  final FailedScanCache cache;
+  final NestState? state;
+
+  @override
+  Result<MfmNode> parseOn(Context context) {
+    // 行頭条件と開始タグを満たした後の内容部分だけをキャッシュする。
+    final scan = cache.start(context.buffer, state, this);
+    final children = <MfmNode>[];
+    var current = context;
+    while (true) {
+      final cachedFailure = scan?.replay(current.position);
+      if (cachedFailure != null) {
+        scan?.fail(cachedFailure);
+        return context.failure(cachedFailure);
+      }
+      scan?.visit(current.position);
+      final result = inner.parseOn(current);
+      if (result is Failure) break;
+      children.add(result.value);
+      current = Context(context.buffer, result.position);
+    }
+    if (children.isEmpty) return context.failure('center content expected');
+    final result = after.parseOn(current);
+    if (result is Failure) {
+      scan?.fail(result.message);
+      return result;
+    }
+    return context.success(
+      CenterNode(mergeAdjacentTextNodes(children)),
+      result.position,
+    );
+  }
+
+  @override
+  _CenterBody copy() => _CenterBody(inner, after, cache, state);
 }
