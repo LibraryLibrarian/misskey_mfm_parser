@@ -153,13 +153,22 @@ void main() {
           expectAst('**$repeated**', [
             BoldNode([TextNode(repeated)]),
           ]);
-          expectAst('[${repeated}x](https://example.com)', [
-            LinkNode(
-              silent: false,
-              url: 'https://example.com',
-              children: [TextNode('${repeated}x')],
-            ),
-          ]);
+          if (repeated.contains('\n')) {
+            // mfm.js 0.28.0: ラベル直下に改行があるとリンクにならない。
+            expectAst('[${repeated}x](https://example.com)', [
+              TextNode('[${repeated}x]('),
+              const UrlNode(url: 'https://example.com'),
+              const TextNode(')'),
+            ]);
+          } else {
+            expectAst('[${repeated}x](https://example.com)', [
+              LinkNode(
+                silent: false,
+                url: 'https://example.com',
+                children: [TextNode('${repeated}x')],
+              ),
+            ]);
+          }
         });
       }
       test('5000 unclosed $unit preserve all input', () {
