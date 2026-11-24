@@ -105,6 +105,7 @@ class MfmParser {
         char(':') | // emojiCode用
         char('#') | // hashtag用
         char(']') | // リンクラベル終端
+        newline() | // ラベル要素の境界で改行を検出する
         string(r'$[') | // fn用
         string('</plain>') | // plain用
         string('<plain>') | // plain用
@@ -283,7 +284,7 @@ class MfmParser {
           .cast<MfmNode>(),
     );
 
-    final start = full.plus().map(mergeAdjacentTextNodes).end();
+    final start = full.star().map(mergeAdjacentTextNodes).end();
 
     return plain.withSearchCache(
       math.withSearchCache(
@@ -348,7 +349,7 @@ class MfmParser {
         .cast<MfmNode>();
 
     return plain.withSearchCache(
-      simple.plus().map(mergeAdjacentTextNodes).end(),
+      simple.star().map(mergeAdjacentTextNodes).end(),
     );
   }
 }

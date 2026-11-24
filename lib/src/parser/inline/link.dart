@@ -113,7 +113,8 @@ class _LinkParserImpl extends Parser<MfmNode> {
         break;
       }
 
-      // 改行は許可しない
+      // mfm.js の manyThen と同様、ラベル要素の境界では改行を許可しない。
+      // 太字や fn などの要素内部で消費される改行は、その構文の規則に従う。
       if (c == '\n' || c == '\r') {
         return fail('newline in link label');
       }

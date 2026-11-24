@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `MfmParser().build().parse('')` and `buildSimple().parse('')` now succeed with an empty list like mfm.js, instead of returning a `Failure`
+- A line break directly inside a link label (LF, CR, or CRLF) no longer makes a link, matching mfm.js. `[a\n](http://a)` is now parsed as text followed by a URL node. Line breaks inside bold or other nested syntax within the label follow the rules of that syntax
+- The `__proto__` argument of an MFM function (`$[x.__proto__ a]`) is no longer kept in `args`, matching mfm.js, where the inherited `__proto__` setter ignores the value. Other names such as `constructor` are kept as before
+- The language of a fenced code block is trimmed with the same whitespace set as JavaScript's `String.prototype.trim`, so U+0085 is kept as in mfm.js
 - Fixed quadratic parse time for input that repeats unclosed syntax, which made the parser freeze for seconds on adversarial input. These are now parsed in near-linear time: repeated `<plain>` (21,000 characters: 3 s to 20 ms), `[` (5,000 repetitions: 4.5 s to 6 ms), `[a` (5,000 repetitions: 9.4 s to 15 ms), `\(` with or without line breaks, and `<center>` followed by line breaks (5,000 repetitions: 47 s to 0.1 s). The resulting nodes and the nesting budget used are unchanged
 
 ## [2.0.1] - 2026-09-15

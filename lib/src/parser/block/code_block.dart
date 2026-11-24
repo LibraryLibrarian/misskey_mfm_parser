@@ -1,6 +1,7 @@
 import 'package:petitparser/petitparser.dart';
 
 import '../../ast.dart';
+import '../common/js_trim.dart';
 import '../core/guards.dart';
 
 /// コードブロックパーサー
@@ -41,7 +42,7 @@ class CodeBlockParser {
       endPart,
       lineBreak.optional(),
     ).map((result) {
-      final lang = result.$2.$3.trim();
+      final lang = jsTrim(result.$2.$3);
       final code = result.$3;
       return CodeBlockNode(
         code: code,
